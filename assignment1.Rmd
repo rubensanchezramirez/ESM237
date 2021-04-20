@@ -1,0 +1,225 @@
+---
+title: "Assignment 1"
+subtitle: "Climate Trend Analysis"
+author: "Ruben Sanchez Ramirez"
+date: "4/16/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+library(chron)
+library(here)
+library(janitor)
+library(zoo)
+library(Kendall)
+library(stargazer)
+
+clim = read_csv(here::here("assignments","data","2548253.csv")) %>% 
+  select(1:13)
+
+date=as.Date(clim$DATE)
+
+```
+
+```{r}
+
+ggplot(clim, aes(date, clim$TMAX))+geom_line()+ labs(y="Daily Maximum Temperature (degrees F)", x="Date")
+
+ggplot(clim, aes(date, clim$TMIN))+geom_line()+ labs(y="Daily Minimum Temperature (degrees F)", x="Date")
+
+ggplot(clim, aes(date, clim$PRCP))+geom_line()+ labs(y="Daily Rainfall (in)", x="Date")
+
+```
+
+```{r}
+
+# find the row with missing data
+fillrow = which(is.na(clim$PRCP))
+fillrow
+clim$PRCP[fillrow]=0
+# replot to make sure it works
+ggplot(clim, aes(date, clim$PRCP))+geom_line()+ labs(y="Daily rainfall (mm)", x="Date")
+
+# find rows with missing data
+# temperature
+fillrow = which(is.na(clim$TMAX))
+fillrow = fillrow[2:length(fillrow)]
+clim$TMAX[fillrow]=(na.locf(clim$TMAX) + rev(na.locf(rev(clim$TMAX))))/2
+ggplot(clim, aes(date, TMAX))+geom_line()+ labs(y="Daily Maximum Temperature (degrees F)", x="Date")
+
+fillrow = which(is.na(clim$TMIN))
+fillrow = fillrow[2:length(fillrow)]
+clim$TMIN[fillrow]=(na.locf(clim$TMIN) + rev(na.locf(rev(clim$TMIN))))/2
+ggplot(clim, aes(date, TMIN))+geom_line()+ labs(y="Daily Maximum Temperature (degrees F)", x="Date")
+
+```
+
+```{r}
+
+clim.mwy = clim %>% group_by(year(date)) %>% summarize(tmax=mean(TMAX), tmin=mean(TMIN), precip=sum(PRCP))
+clim.mwy$dt = unique(year(date))
+
+ggplot(clim.mwy, aes(x=dt, tmax))+geom_point(col="red")+
+  scale_y_continuous(limits=c(min(clim.mwy$tmin), max(clim.mwy$tmax)))+
+geom_point(data=clim.mwy, aes(x=dt, tmin), col="blue")
+
+a = ggplot(clim.mwy, aes(x=dt, tmax))+geom_point(col="red")+
+  scale_y_continuous(limits=c(min(clim.mwy$tmin), max(clim.mwy$tmax)))+
+geom_point(data=clim.mwy, aes(x=dt, tmin), col="blue")+
+  scale_x_continuous(limits = c(1914,2025))+
+  labs(x = "Year",
+       y = "Mean Daily Temperature",
+       title = "Annual Average Daily Temperatures (Max & Min)",
+       subtitle = "Happy Camp Ranger Station, CA 1914 - 2020")+
+  theme_minimal() +
+  theme(text = element_text(family = "serif"),
+        plot.title = element_text(size=14, face="bold"),
+        plot.subtitle = element_text(size = 10, face = "bold"),
+        axis.title.x = element_text(size=10, face="bold"),
+        axis.title.y = element_text(size=10, face="bold"),
+        axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size=10),
+        legend.text = element_text(size = 10),
+        legend.title = element_blank())
+
+
+```
+
+```{r}
+
+# now lets add a trend line
+a =a+stat_smooth(method="lm", col="red")
+a
+a+ stat_smooth(data=clim.mwy, aes(x=dt,tmin), col="blue", method="lm")
+
+ggsave(here::here("assignments","figures","plot.a.png"),width = 8,height= 5)
+
+```
+
+```{r}
+
+clim.mwy.2 = clim %>% group_by(year(date)) %>% summarize(tmax=max(TMAX), tmin=min(TMIN), precip=sum(PRCP))
+clim.mwy.2$dt = unique(year(date))
+
+a = ggplot(clim.mwy.2, aes(x=dt, tmax))+geom_point(col="red")+
+  scale_y_continuous(limits=c(min(clim.mwy.2$tmin), max(clim.mwy.2$tmax)))+
+geom_point(data=clim.mwy.2, aes(x=dt, tmin), col="blue")+
+  scale_x_continuous(limits = c(1914,2025))+
+  labs(x = "Year",
+       y = "Temperature (F)",
+       title = "Annual Max & Min Daily Temperatures",
+       subtitle = "Happy Camp Ranger Station, CA 1914 - 2020")+
+  theme_minimal() +
+  theme(text = element_text(family = "serif"),
+        plot.title = element_text(size=14, face="bold"),
+        plot.subtitle = element_text(size = 10, face = "bold"),
+        axis.title.x = element_text(size=10, face="bold"),
+        axis.title.y = element_text(size=10, face="bold"),
+        axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size=10),
+        legend.text = element_text(size = 10),
+        legend.title = element_blank())
+
+a =a+stat_smooth(method="lm", col="red")
+a
+a+ stat_smooth(data=clim.mwy.2, aes(x=dt,tmin), col="blue", method="lm")
+
+ggsave(here::here("assignments","figures","plot.c.png"),width = 8,height= 5)
+
+```
+
+
+```{r}
+
+res.1=lm(tmin~dt, data=clim.mwy)
+summary(res.1)
+confint(res.1,"dt", level=0.95)
+ggplot(clim.mwy, aes(x=dt, y=tmin)) + stat_summary(fun.y="mean", geom="point", col="red", size=4)+theme(axis.text=element_text(size=14, face="bold"), axis.title=element_text(size=14, face="bold")) + geom_smooth(method="lm")
+
+```
+
+```{r}
+
+res.2=lm(tmax~dt, data=clim.mwy)
+summary(res.2)
+confint(res.2,"dt", level=0.95)
+ggplot(clim.mwy, aes(x=dt, y=tmax)) + stat_summary(fun.y="mean", geom="point", col="red", size=4)+theme(axis.text=element_text(size=14, face="bold"), axis.title=element_text(size=14, face="bold")) + geom_smooth(method="lm")
+
+```
+
+```{r}
+
+res.3=lm(precip~dt, data=clim.mwy)
+summary(res.3)
+confint(res.3,"dt", level=0.95)
+ggplot(clim.mwy, aes(x=dt, y=precip)) + stat_summary(fun.y="mean", geom="point", col="dodgerblue3", size=4)+theme(axis.text=element_text(size=14, face="bold"), axis.title=element_text(size=14, face="bold")) + geom_smooth(method="lm", col="black")+
+  scale_x_continuous(limits = c(1914,2025))+
+  labs(x = "Year",
+       y = "Precipitation (mm)",
+       title = "Total Annual Precipitation (mm)",
+       subtitle = "Happy Camp Ranger Station, CA 1914 - 2020")+
+  theme_minimal() +
+  theme(text = element_text(family = "serif"),
+        plot.title = element_text(size=14, face="bold"),
+        plot.subtitle = element_text(size = 10, face = "bold"),
+        axis.title.x = element_text(size=10, face="bold"),
+        axis.title.y = element_text(size=10, face="bold"),
+        axis.text.x = element_text(size=10),
+        axis.text.y = element_text(size=10),
+        legend.text = element_text(size = 10),
+        legend.title = element_blank())
+
+ggsave(here::here("assignments","figures","plot.b.png"),width = 8,height= 5)
+
+```
+
+```{r}
+
+stargazer(res.1, res.2, res.3, title="Results", align=TRUE)
+
+```
+
+
+
+```{r}
+
+# early portion
+res_early=lm(tmin~dt, data=subset(clim.mwy, clim.mwy$dt %in% c(1915:1925)))
+summary(res_early)
+confint(res_early,"dt", level=0.90)
+ggplot(subset(clim.mwy, clim.mwy$dt %in% c(1915:1925)), aes(x=dt, y=tmax)) + stat_summary(fun.y="mean", geom="point", col="red", size=4)+theme(axis.text=element_text(size=14, face="bold"), axis.title=element_text(size=14, face="bold")) + geom_smooth(method="lm")
+
+# last decade
+res_late=lm(tmin~dt, data=subset(clim.mwy, clim.mwy$dt %in% c(2009:2019)))
+summary(res_late)
+confint(res_late,"dt", level=0.90)
+ggplot(subset(clim.mwy, clim.mwy$dt %in% c(2009:2019)), aes(x=dt, y=tmax)) + stat_summary(fun.y="mean", geom="point", col="red", size=4)+theme(axis.text=element_text(size=14, face="bold"), axis.title=element_text(size=14, face="bold")) + geom_smooth(method="lm")
+
+```
+
+
+```{r}
+
+MannKendall(clim.mwy$tmin)
+MannKendall(clim.mwy$tmax)
+MannKendall(clim.mwy$precip)
+
+```
+
+```{r}
+
+t.test(subset(clim.mwy$tmin, clim.mwy$dt %in% 1915:1935), subset(clim.mwy$tmin, clim.mwy$dt %in% 1999:2019))
+
+```
+
+
+
+
